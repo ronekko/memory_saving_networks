@@ -36,11 +36,11 @@ class Revnet(chainer.Chain):
     def __init__(self, n=6):
         super(Revnet, self).__init__(
             conv1=L.Convolution2D(3, 32, 3, pad=1, nobias=True),
-            stage2=RevnetStage(n, 64),
-            stage3=RevnetStage(n, 128),
-            stage4=RevnetStage(n, 256),
-            bn_out=L.BatchNormalization(256),
-            fc_out=L.Linear(256, 10)
+            stage2=RevnetStage(n, 32),
+            stage3=RevnetStage(n, 64),
+            stage4=RevnetStage(n, 128),
+            bn_out=L.BatchNormalization(128),
+            fc_out=L.Linear(128, 10)
         )
 
     def __call__(self, x):
@@ -173,7 +173,7 @@ if __name__ == '__main__':
     p.batch_size = 100
     p.lr_init = 0.1
     p.lr_decrease_rate = 0.1
-    p.weight_decay = 5e-4
+    p.weight_decay = 2e-4
     p.epochs_lr_divide10 = [80, 120]
 
     xp = np if p.gpu < 0 else chainer.cuda.cupy
