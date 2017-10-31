@@ -67,9 +67,9 @@ class RevnetStage(chainer.ChainList):
     '''
     def __init__(self, n_blocks, channels, use_bottleneck=True):
         if use_bottleneck:
-            unit_class = ResnetBottleneckUnit
+            unit_class = RevnetBottleneckUnit
         else:
-            unit_class = ResnetUnit
+            unit_class = RevnetUnit
         blocks = [unit_class(channels // 2) for i in range(n_blocks)]
         super(RevnetStage, self).__init__(*blocks)
         self._channels = channels
@@ -131,11 +131,11 @@ class RevnetStageFunction(chainer.Function):
         return gx,
 
 
-class ResnetUnit(chainer.Chain):
+class RevnetUnit(chainer.Chain):
     '''The function F or G in the revnet paper.
     '''
     def __init__(self, channels):
-        super(ResnetUnit, self).__init__(
+        super(RevnetUnit, self).__init__(
             # In revnet training, BN's `decay` parameters should be `sqrt`ed
             # in order to compensate double forward passes for one update.
             brc1=BRCChain(channels, channels, 3, pad=1, decay=0.9**0.5),
@@ -147,12 +147,12 @@ class ResnetUnit(chainer.Chain):
         return h
 
 
-class ResnetBottleneckUnit(chainer.Chain):
+class RevnetBottleneckUnit(chainer.Chain):
     '''The function F or G in the revnet paper.
     '''
     def __init__(self, channels):
         bottleneck = channels // 4
-        super(ResnetBottleneckUnit, self).__init__(
+        super(RevnetBottleneckUnit, self).__init__(
             # In revnet training, BN's `decay` parameters should be `sqrt`ed
             # in order to compensate double forward passes for one update.
             brc1=BRCChain(channels, bottleneck, 1, pad=0, decay=0.9**0.5),
