@@ -242,10 +242,12 @@ if __name__ == '__main__':
 
             epoch_losses = []
             epoch_accs = []
-            for i in tqdm(range(0, num_train, p.batch_size)):
-                x_batch = random_augment_padding(x_train[i:i+p.batch_size])
+            perm = np.random.permutation(num_train)
+            index_batches = np.split(perm, num_train // p.batch_size)
+            for i_batch in tqdm(index_batches):
+                x_batch = random_augment_padding(x_train[i_batch])
                 x_batch = xp.asarray(x_batch)
-                c_batch = xp.asarray(c_train[i:i+p.batch_size])
+                c_batch = xp.asarray(c_train[i_batch])
                 model.cleargrads()
                 with chainer.using_config('train', True):
                     y_batch = model(x_batch)
