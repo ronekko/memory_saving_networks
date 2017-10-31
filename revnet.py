@@ -33,14 +33,19 @@ class Revnet(chainer.Chain):
             Number of units in each group.
     '''
 
-    def __init__(self, n=6):
+    def __init__(self, n=6, channels=[32, 32, 64, 112], use_bottleneck=False):
+        if not use_bottleneck:  # default case
+            ch_out = channels
+        else:
+            ch_out = [channels[0]] + [ch * 4 for ch in channels[1:]]
+
         super(Revnet, self).__init__(
-            conv1=L.Convolution2D(3, 32, 3, pad=1, nobias=True),
-            stage2=RevnetStage(n, 32),
-            stage3=RevnetStage(n, 64),
-            stage4=RevnetStage(n, 128),
-            bn_out=L.BatchNormalization(128),
-            fc_out=L.Linear(128, 10)
+            conv1=L.Convolution2D(3, ch_out[0], 3, pad=1, nobias=True),
+            stage2=RevnetStage(n, ch_out[1], use_bottleneck),
+            stage3=RevnetStage(n, ch_out[2], use_bottleneck),
+            stage4=RevnetStage(n, ch_out[3], use_bottleneck),
+            bn_out=L.BatchNormalization(ch_out[3]),
+            fc_out=L.Linear(ch_out[3], 10)
         )
 
     def __call__(self, x):
@@ -60,8 +65,12 @@ class Revnet(chainer.Chain):
 class RevnetStage(chainer.ChainList):
     '''Reversible sequence of `ResnetUnit`s.
     '''
-    def __init__(self, n_blocks, channels):
-        blocks = [ResnetUnit(channels // 2) for i in range(n_blocks)]
+    def __init__(self, n_blocks, channels, use_bottleneck=True):
+        if use_bottleneck:
+            unit_class = ResnetBottleneckUnit
+        else:
+            unit_class = ResnetUnit
+        blocks = [unit_class(channels // 2) for i in range(n_blocks)]
         super(RevnetStage, self).__init__(*blocks)
         self._channels = channels
 
@@ -123,8 +132,7 @@ class RevnetStageFunction(chainer.Function):
 
 
 class ResnetUnit(chainer.Chain):
-    '''Residual unit (y = x + f(x)) of 'pre-activation'.
-    This corresponds to the function F or G in the revnet paper.
+    '''The function F or G in the revnet paper.
     '''
     def __init__(self, channels):
         super(ResnetUnit, self).__init__(
@@ -136,6 +144,25 @@ class ResnetUnit(chainer.Chain):
     def __call__(self, x):
         h = self.brc1(x)
         h = self.brc2(h)
+        return h
+
+
+class ResnetBottleneckUnit(chainer.Chain):
+    '''The function F or G in the revnet paper.
+    '''
+    def __init__(self, channels):
+        bottleneck = channels // 4
+        super(ResnetBottleneckUnit, self).__init__(
+            # In revnet training, BN's `decay` parameters should be `sqrt`ed
+            # in order to compensate double forward passes for one update.
+            brc1=BRCChain(channels, bottleneck, 1, pad=0, decay=0.9**0.5),
+            brc2=BRCChain(bottleneck, bottleneck, 3, pad=1, decay=0.9**0.5),
+            brc3=BRCChain(bottleneck, channels, 1, pad=0, decay=0.9**0.5))
+
+    def __call__(self, x):
+        h = self.brc1(x)
+        h = self.brc2(h)
+        h = self.brc3(h)
         return h
 
 
@@ -168,7 +195,9 @@ if __name__ == '__main__':
     # Hyperparameters
     p = SimpleNamespace()
     p.gpu = 0  # GPU>=0, CPU < 0
+    p.use_bottleneck = True
     p.n = 18   # number of units in each stage
+    p.channels = [32, 32, 64, 128]
     p.num_epochs = 160
     p.batch_size = 100
     p.lr_init = 0.1
@@ -192,7 +221,7 @@ if __name__ == '__main__':
     x_test -= mean_rgb
 
     # Model and optimizer
-    model = Revnet(n=p.n)
+    model = Revnet(p.n, p.channels, p.use_bottleneck)
     if p.gpu >= 0:
         model.to_gpu()
 #    optimizer = optimizers.MomentumSGD(p.lr_init)
